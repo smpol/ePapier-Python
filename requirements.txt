@@ -1,0 +1,9 @@
+Flask
+Pillow
+requests
+Jetson.GPIO
+selenium
+webdriver-manager
+spidev
+python-dotenv
+requests
