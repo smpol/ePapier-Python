@@ -7,3 +7,5 @@ webdriver-manager
 spidev
 python-dotenv
 requests
+psutil
+waitress
