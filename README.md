@@ -2,7 +2,8 @@
 
 Repozytorium odpowiedzialne za część projektu związaną z językiem Python, wykorzystywaną do obsługi inteligentnego ekranu typu ePapier.
 
-> **Uwaga**: Projekt jest w fazie rozwoju, przewiduje się dalsze usprawnienia, a bieżąca wersja może zawierać błędy.
+> [!IMPORTANT]
+> Projekt jest w fazie rozwoju, przewiduje się dalsze usprawnienia, a bieżąca wersja może zawierać błędy.
 
 ## Technologie
 
