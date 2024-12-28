@@ -49,13 +49,13 @@ Projekt bazuje na języku Python, z wykorzystaniem biblioteki do obsługi ekran�
 6. Na koniec uruchom program:
 
    ```bash
-   sudo python screen_update.py
+   sudo python app.py
    ```
 
    Można także do uruchomienia w tle użyć `screen`
 
    ```bash
-   sudo screen python screen_update.py
+   sudo screen python app.py
    ```
 
 ## Czyszczenie ekranu

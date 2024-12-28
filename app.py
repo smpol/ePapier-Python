@@ -19,6 +19,10 @@ import signal
 import psutil
 from waitress import serve
 import tempfile
+import urllib3
+
+# Disable SSL warnings for requests for localhost
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Load environment variables
 load_dotenv()
@@ -59,6 +63,8 @@ except Exception as e:
     sys.exit(1)
 
 display_initialized = True
+cleared_screen = True
+use_second_flag = False
 update_lock = Lock()
 
 # Update intervals in seconds
@@ -66,6 +72,7 @@ quick_update_interval = 15  # 15 seconds
 full_update_interval = 30 * 60  # 20 minutes (1200 seconds)
 last_quick_update = time.time()
 last_full_update = time.time()
+second_screen_view = time.time()
 
 # Cloudflare API credentials
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
@@ -124,6 +131,28 @@ def cleanup():
         except Exception as e:
             logging.error(f"Failed to close requests session: {e}")
     log_open_fds("cleanup - end")
+
+def clear_screen():
+    """Clear the e-paper display."""
+    logging.info("Clearing screen")
+    log_open_fds("clear_screen - start")
+    try:
+        epd.init_4Gray()
+        epd.Clear()
+        epd.sleep()
+    except Exception as e:
+        logging.error("Error clearing screen: %s", e)
+    finally:
+        log_open_fds("clear_screen - end")
+
+def check_website():
+    """Check if the website is accessible and return the status code."""
+    try:
+        response = requests.get("https://localhost/screen", timeout=60, verify=False)
+        logging.info("Website status code: %s", response.status_code)
+        return response.status_code == 200
+    except requests.RequestException as e:
+        return False
 
 def get_browser():
     """Initialize and return a singleton instance of the Selenium WebDriver."""
@@ -236,18 +265,29 @@ def periodic_cloudflare_update():
     log_open_fds("periodic_cloudflare_update - end")
 
 def capture_and_display(full_refresh=False):
-    global display_initialized
+    global display_initialized, second_screen_view,  use_second_flag
     if shutdown_event.is_set():
         return
 
     logging.info("Capturing and displaying")
     log_open_fds("capture_and_display - start")
     current_ip = get_local_ip()
-    url = f"https://localhost/?ip={current_ip}"
+
+    # Logic to toggle between second=true and normal view every 5 minutes
+    if use_second_flag and (time.time() - second_screen_view > 300):
+        second_screen_view = time.time()
+        use_second_flag = False
+    elif not use_second_flag and (time.time() - second_screen_view > 300):
+        second_screen_view = time.time()
+        use_second_flag = True
+
+    url = f"https://localhost/screen?ip={current_ip}"
+    if use_second_flag:
+        url += "&second=true"
 
     try:
         logging.info("Refreshing page content for screenshot capture")
-        browser.get(url)  # Refresh the page
+        browser.get(url)
 
         screenshot = browser.get_screenshot_as_png()
         screenshot_io = BytesIO(screenshot)
@@ -286,35 +326,38 @@ def update_screen():
 
 def main_loop():
     """Main loop that handles periodic screen updates."""
-    global last_quick_update, last_full_update, display_initialized
+    global last_quick_update, last_full_update, display_initialized, cleared_screen
     logging.info("Entering main loop")
     log_open_fds("main_loop - start")
     try:
         while not shutdown_event.is_set():
-            current_time = time.time()
-
-            if update_lock.locked():
-                logging.debug("Update lock is active, sleeping for 0.5 seconds")
-                time.sleep(0.5)
-                continue
-
-            if not display_initialized:
-                logging.info("Display not initialized, reinitializing and waiting")
-                initialize_epaper()
-                time.sleep(quick_update_interval)
-                continue
-
-            with update_lock:
-                if current_time - last_full_update >= full_update_interval:
-                    capture_and_display(full_refresh=True)
-                    last_full_update = current_time
-                elif current_time - last_quick_update >= quick_update_interval:
-                    capture_and_display(full_refresh=False)
-                    last_quick_update = current_time
-
-            time.sleep(1)
+            try:
+                if check_website():
+                    cleared_screen = False
+                    current_time = time.time()
+                    if update_lock.locked():
+                        logging.debug("Update lock is active, sleeping for 0.5 seconds")
+                        time.sleep(0.5)
+                        continue
+                    with update_lock:
+                        if current_time - last_full_update >= full_update_interval:
+                            capture_and_display(full_refresh=True)
+                            last_full_update = current_time
+                        elif current_time - last_quick_update >= quick_update_interval:
+                            capture_and_display(full_refresh=False)
+                            last_quick_update = current_time
+                else:
+                    logging.warning("Website is not accessible, waiting 10 seconds")
+                    if not cleared_screen:
+                        logging.info("Clearing screen as website is not accessible")
+                        clear_screen()
+                        cleared_screen = True
+                    time.sleep(10)
+            except Exception as e:
+                logging.error("Unhandled exception in main loop: %s", e)
+                time.sleep(5)
     except Exception as e:
-        logging.error("Error in main loop: %s", e)
+        logging.error("Critical error in main loop: %s", e)
     finally:
         cleanup()
     log_open_fds("main_loop - end")
