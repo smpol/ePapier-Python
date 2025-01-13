@@ -22,31 +22,18 @@ Projekt bazuje na języku Python, z wykorzystaniem biblioteki do obsługi ekran�
 2. Następnie wykonaj poniższe komendy:
 
    ```bash
-   sudo apt-get update
-   sudo apt-get install python3-pip
-   sudo apt-get install python3-pil
-   sudo apt-get install python3-numpy
+   sudo apt update
+   sudo apt install python3-pip
+   sudo apt install chromium-chromedriver
    ```
 
-3. Utwórz środowisko wirtualne dla Pythona:
+3. Zainstaluj wymagane biblioteki:
 
    ```bash
-   python -m venv env
+   sudo pip3 install -r requirements.txt --break-sy
    ```
 
-4. Aktywuj środowisko:
-
-   ```bash
-   source env/bin/activate
-   ```
-
-5. Zainstaluj wymagane biblioteki:
-
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-6. Na koniec uruchom program:
+4. Na koniec uruchomienie programu:
 
    ```bash
    sudo python app.py
@@ -56,6 +43,12 @@ Projekt bazuje na języku Python, z wykorzystaniem biblioteki do obsługi ekran�
 
    ```bash
    sudo screen python app.py
+   ```
+
+   Do uruchomienia programu w tle na autostarcie systemu można skorzystać z skryptu `autostarh.sh`:
+
+   ```bash
+   sudo ./autostart.sh
    ```
 
 ## Czyszczenie ekranu

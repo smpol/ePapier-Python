@@ -265,7 +265,7 @@ def periodic_cloudflare_update():
     log_open_fds("periodic_cloudflare_update - end")
 
 def capture_and_display(full_refresh=False):
-    global display_initialized, second_screen_view,  use_second_flag
+    global display_initialized, second_screen_view, use_second_flag
     if shutdown_event.is_set():
         return
 
@@ -285,34 +285,44 @@ def capture_and_display(full_refresh=False):
     if use_second_flag:
         url += "&second=true"
 
-    try:
-        logging.info("Refreshing page content for screenshot capture")
-        browser.get(url)
+    last_refresh_time = time.time()
 
-        screenshot = browser.get_screenshot_as_png()
-        screenshot_io = BytesIO(screenshot)
-        image = Image.open(screenshot_io).convert('L')
-        image = image.resize((epd.width, epd.height))
+    while True:
+        try:
+            logging.info("Refreshing page content for screenshot capture")
+            browser.get(url)
 
-        if full_refresh:
-            epd.init_4Gray()
-            epd.Clear()
-            epd.display(epd.getbuffer(image))
-            epd.sleep()
-        else:
-            epd.init_part()
-            epd.display_Partial(epd.getbuffer(image), 0, 0, epd.width, epd.height)
-            epd.sleep()  # Ensure resources are released after partial display
+            screenshot = browser.get_screenshot_as_png()
+            screenshot_io = BytesIO(screenshot)
+            image = Image.open(screenshot_io).convert('L')
+            image = image.resize((epd.width, epd.height))
 
-        logging.info("Display updated with %s refresh", "full" if full_refresh else "partial")
-    except Exception as e:
-        logging.error("Error capturing and displaying: %s", e)
-        display_initialized = False
-    finally:
-        if 'image' in locals():
-            image.close()  # Close the image to release resources
-        screenshot_io.close()
-        log_open_fds("capture_and_display - end")
+            if full_refresh:
+                epd.init_4Gray()
+                epd.Clear()
+                epd.display(epd.getbuffer(image))
+                epd.sleep()
+            else:
+                epd.init_part()
+                epd.display_Partial(epd.getbuffer(image), 0, 0, epd.width, epd.height)
+                epd.sleep()  # Ensure resources are released after partial display
+
+            logging.info("Display updated with %s refresh", "full" if full_refresh else "partial")
+            break  # Exit loop after successful refresh
+
+        except Exception as e:
+            logging.error("Error capturing and displaying: %s", e)
+            display_initialized = False
+
+            if time.time() - last_refresh_time > 60:
+                logging.info("Refresh attempt exceeded 60 seconds. Retrying...")
+                last_refresh_time = time.time()
+
+        finally:
+            if 'image' in locals():
+                image.close()  # Close the image to release resources
+            screenshot_io.close()
+            log_open_fds("capture_and_display - end")
 
 @app.route('/updatescreen', methods=['GET'])
 def update_screen():
