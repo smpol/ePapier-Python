@@ -93,7 +93,7 @@ def initialize_epaper():
     logging.info("Initializing e-paper display")
     log_open_fds("initialize_epaper - start")
     try:
-        epd.init_4Gray()
+        epd.init()
         epd.Clear()
         display_initialized = True
     except Exception as e:
@@ -109,7 +109,7 @@ def cleanup():
     logging.info("Performing cleanup")
     log_open_fds("cleanup - start")
     try:
-        epd.init_4Gray()
+        epd.init()
         epd.Clear()
         epd.sleep()
         epd7in5_V2.epdconfig.module_exit()
@@ -137,7 +137,7 @@ def clear_screen():
     logging.info("Clearing screen")
     log_open_fds("clear_screen - start")
     try:
-        epd.init_4Gray()
+        epd.init()
         epd.Clear()
         epd.sleep()
     except Exception as e:
@@ -298,7 +298,7 @@ def capture_and_display(full_refresh=False):
             image = image.resize((epd.width, epd.height))
 
             if full_refresh:
-                epd.init_4Gray()
+                epd.init()
                 epd.Clear()
                 epd.display(epd.getbuffer(image))
                 epd.sleep()
