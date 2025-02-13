@@ -14,7 +14,7 @@ from io import BytesIO
 from flask import Flask
 from dotenv import load_dotenv
 from lib.waveshare_epd import epd7in5_V2
-from selenium.common.exceptions import WebDriverException
+from selenium.common.exceptions import WebDriverException, TimeoutException  
 import signal
 import psutil
 from waitress import serve
@@ -114,22 +114,24 @@ def cleanup():
         epd.sleep()
         epd7in5_V2.epdconfig.module_exit()
     except Exception as e:
-        logging.error("Error during cleanup: %s", e)
+        logging.error("Error during display cleanup: %s", e)
     finally:
-        # Ensure browser is closed
         global browser
-        if browser:
+        # Zamknij przeglądarkę jeśli istnieje
+        if browser is not None:
             try:
                 logging.info("Closing browser during cleanup")
                 browser.quit()
             except Exception as e:
-                logging.warning("Failed to close browser during cleanup: %s", e)
-        # Close the requests session
+                logging.warning("Error closing browser: %s", e)
+            finally:
+                browser = None  # Zresetuj przeglądarkę
+        # Zamknij sesję requests
         try:
             session.close()
             logging.info("Requests session closed")
         except Exception as e:
-            logging.error(f"Failed to close requests session: {e}")
+            logging.error("Error closing requests session: %s", e)
     log_open_fds("cleanup - end")
 
 def clear_screen():
@@ -157,8 +159,14 @@ def check_website():
 def get_browser():
     """Initialize and return a singleton instance of the Selenium WebDriver."""
     global browser
-    if browser and browser.service.process:
-        return browser  # Reuse the current instance if available
+    if browser is not None:
+        try:
+            # Sprawdź czy przeglądarka jest jeszcze aktywna
+            browser.current_url  # Proste sprawdzenie statusu
+            return browser
+        except Exception as e:
+            logging.warning("Browser session invalid, reinitializing: %s", e)
+            browser = None
 
     logging.info("Initializing browser")
     log_open_fds("get_browser - start")
@@ -169,11 +177,13 @@ def get_browser():
         chrome_options.add_argument("--no-sandbox")
         chrome_options.add_argument("--window-size=800,525")
         chrome_options.add_argument("--ignore-certificate-errors")
-        service = Service('/usr/bin/chromedriver')  # Path to chromedriver
+        service = Service('/usr/bin/chromedriver')
         browser = webdriver.Chrome(service=service, options=chrome_options)
+        browser.set_page_load_timeout(30)  # Ustaw timeout
         logging.info("Browser initialized successfully")
     except WebDriverException as e:
         logging.error("Failed to initialize browser: %s", e)
+        browser = None
     log_open_fds("get_browser - end")
     return browser
 
@@ -265,7 +275,7 @@ def periodic_cloudflare_update():
     log_open_fds("periodic_cloudflare_update - end")
 
 def capture_and_display(full_refresh=False):
-    global display_initialized, second_screen_view, use_second_flag
+    global display_initialized, second_screen_view, use_second_flag, browser
     if shutdown_event.is_set():
         return
 
@@ -285,11 +295,22 @@ def capture_and_display(full_refresh=False):
     if use_second_flag:
         url += "&second=true"
 
-    last_refresh_time = time.time()
+    max_retries = 3
+    retry_count = 0
 
-    while True:
+    while retry_count < max_retries:
+        screenshot_io = None  # Inicjalizacja zmiennej
+        image = None  # Inicjalizacja zmiennej
         try:
             logging.info("Refreshing page content for screenshot capture")
+            
+            # Sprawdź i zainicjuj przeglądarkę jeśli potrzebna
+            if browser is None:
+                browser = get_browser()
+                if browser is None:
+                    raise RuntimeError("Browser initialization failed")
+            
+            browser.set_page_load_timeout(30)  # Ustaw timeout na 30 sekund
             browser.get(url)
 
             screenshot = browser.get_screenshot_as_png()
@@ -305,24 +326,43 @@ def capture_and_display(full_refresh=False):
             else:
                 epd.init_part()
                 epd.display_Partial(epd.getbuffer(image), 0, 0, epd.width, epd.height)
-                epd.sleep()  # Ensure resources are released after partial display
+                epd.sleep()
 
             logging.info("Display updated with %s refresh", "full" if full_refresh else "partial")
-            break  # Exit loop after successful refresh
+            break  # Sukces - wyjdź z pętli
+
+        except TimeoutException as e:
+            logging.error("Page load timeout: %s", e)
+            retry_count += 1
+            logging.info("Restarting browser due to timeout (attempt %d/%d)", retry_count, max_retries)
+            try:
+                if browser:
+                    browser.quit()
+            except Exception as e:
+                logging.warning("Error closing browser: %s", e)
+            browser = None
 
         except Exception as e:
             logging.error("Error capturing and displaying: %s", e)
-            display_initialized = False
-
-            if time.time() - last_refresh_time > 60:
-                logging.info("Refresh attempt exceeded 60 seconds. Retrying...")
-                last_refresh_time = time.time()
+            retry_count += 1
+            logging.info("Restarting browser due to error (attempt %d/%d)", retry_count, max_retries)
+            try:
+                if browser:
+                    browser.quit()
+            except Exception as e:
+                logging.warning("Error closing browser: %s", e)
+            browser = None
 
         finally:
-            if 'image' in locals():
-                image.close()  # Close the image to release resources
-            screenshot_io.close()
-            log_open_fds("capture_and_display - end")
+            # Bezpieczne zamykanie zasobów
+            if image is not None:
+                image.close()
+            if screenshot_io is not None:
+                screenshot_io.close()
+            
+        time.sleep(5)  # Odczekaj przed ponowną próbą
+
+    log_open_fds("capture_and_display - end")
 
 @app.route('/updatescreen', methods=['GET'])
 def update_screen():
