@@ -69,7 +69,7 @@ update_lock = Lock()
 
 # Update intervals in seconds
 quick_update_interval = 15  # 15 seconds
-full_update_interval = 30 * 60  # 20 minutes (1200 seconds)
+full_update_interval = 20 * 60  # 20 minutes (1200 seconds)
 last_quick_update = time.time()
 last_full_update = time.time()
 second_screen_view = time.time()
