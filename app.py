@@ -69,10 +69,11 @@ update_lock = Lock()
 
 # Update intervals in seconds
 quick_update_interval = 15  # 15 seconds
-full_update_interval = 20 * 60  # 20 minutes (1200 seconds)
+full_update_interval = 60 * 60  # 60 minutes
 last_quick_update = time.time()
 last_full_update = time.time()
-second_screen_view = time.time()
+second_screen_view = time.time() # Timestamp for second screen view toggle
+seconds_change_interval = 300  # 5 minutes
 
 # Cloudflare API credentials
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
@@ -284,10 +285,10 @@ def capture_and_display(full_refresh=False):
     current_ip = get_local_ip()
 
     # Logic to toggle between second=true and normal view every 5 minutes
-    if use_second_flag and (time.time() - second_screen_view > 300):
+    if use_second_flag and (time.time() - second_screen_view > seconds_change_interval):
         second_screen_view = time.time()
         use_second_flag = False
-    elif not use_second_flag and (time.time() - second_screen_view > 300):
+    elif not use_second_flag and (time.time() - second_screen_view > seconds_change_interval):
         second_screen_view = time.time()
         use_second_flag = True
 
